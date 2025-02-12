@@ -710,6 +710,6 @@ if (selfPingUrl) {
 	}, pingInterval)
 }
 
-server.listen(port, () => {
-	console.log(`Админ-панель запущена на http://localhost:${port}`)
+server.listen(port, '0.0.0.0', () => {
+	console.log(`Админ-панель запущена на http://0.0.0.0:${port}`)
 })
