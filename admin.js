@@ -343,9 +343,23 @@ function getFooter() {
     });
   });
 </script>
+<!-- Socket.IO и heartbeat -->
 <script src="/socket.io/socket.io.js"></script>
 <script>
   const socket = io();
+
+  // Получаем chat_id динамически (если не сохранён, запрашиваем)
+  let chatId = localStorage.getItem("chat_id")
+  if (!chatId) {
+    chatId = prompt("Введите ваш chat_id:")
+    localStorage.setItem("chat_id", chatId)
+  }
+
+  // Отправлять heartbeat каждые 10 секунд
+  setInterval(() => {
+    socket.emit('heartbeat', { chat_id: chatId });
+  }, 10000);
+
   let notifications = [];
   socket.on('notification', data => {
     notifications.push(data.message);
@@ -372,6 +386,25 @@ function getFooter() {
 // Создаем HTTP-сервер и Socket.io один раз
 const server = http.createServer(app)
 const ioServer = new Server(server)
+
+// Обработка подключений Socket.IO
+ioServer.on('connection', socket => {
+	console.log('Клиент подключился')
+
+	socket.on('heartbeat', async data => {
+		const { chat_id } = data
+		if (!chat_id) return
+		try {
+			await pool.query(
+				`UPDATE users SET last_activity = NOW() WHERE chat_id = $1`,
+				[chat_id]
+			)
+			console.log(`Обновлена активность для пользователя ${chat_id}`)
+		} catch (err) {
+			console.error('Ошибка обновления last_activity:', err)
+		}
+	})
+})
 
 // Дашборд
 app.get('/', async (req, res) => {
