@@ -36,10 +36,6 @@ function isOnline(lastActivity) {
 	return (now - last) / (1000 * 60) <= 5
 }
 
-function zeroArrayIfNoOrders(count) {
-	return count === 0 ? [0, 0, 0, 0, 0, 0, 0] : [5, 8, 3, 10, 7, 6, 9]
-}
-
 function badgeStatus(online) {
 	return online
 		? `<span style="background: linear-gradient(135deg, #4caf50, #2e7d32); padding: 0.3em 0.6em; border-radius: 0.25rem; color: #fff;">Online</span>`
@@ -329,14 +325,14 @@ function getFooter() {
             Chart.instances[ordersChartEl.id].destroy();
           }
           const borderColor = (currentTheme === 'light') ? '#7b61ff' : '#fff';
-          const chartData = [5,8,3,10,7,6,9];
+          // Перестроим график с новыми данными
           new Chart(ctx, {
             type: 'line',
             data: {
-              labels: ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"],
+              labels: ordersChartLabels,
               datasets: [{
                 label: 'Заказы',
-                data: chartData,
+                data: ordersChartData,
                 backgroundColor: 'rgba(255,255,255,0.1)',
                 borderColor: borderColor,
                 borderWidth: 2,
@@ -381,12 +377,34 @@ app.get('/', async (req, res) => {
 		const totalOrders = parseInt(totalOrdersRes.rows[0].count)
 		const onlineCount = parseInt(onlineRes.rows[0].count)
 		const revenue = parseFloat(revenueRes.rows[0].revenue)
-		const ordersCountRes = await pool.query('SELECT COUNT(*) FROM orders')
-		const totalOrdersCount = parseInt(ordersCountRes.rows[0].count)
-		const chartData = zeroArrayIfNoOrders(totalOrdersCount)
+
+		// Формируем данные для графика заказов за последние 7 дней
+		const ordersChartQuery = await pool.query(`
+      SELECT DATE_TRUNC('day', created_at) as day, COUNT(*) as count
+      FROM orders
+      WHERE created_at >= CURRENT_DATE - INTERVAL '6 days'
+      GROUP BY day
+      ORDER BY day;
+    `)
+		// Массив для 7 дней (индексы 0 - Пн, 6 - Вс)
+		const ordersChartData = Array(7).fill(0)
+		const ordersChartLabels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+
+		ordersChartQuery.rows.forEach(row => {
+			const date = new Date(row.day)
+			let jsDay = date.getDay() // 0 - Вс, 1 - Пн, ..., 6 - Сб
+			let index = jsDay - 1
+			if (jsDay === 0) index = 6 // Переносим воскресенье в конец
+			ordersChartData[index] = parseInt(row.count)
+		})
+
+		// Формируем HTML для графика – теперь без встроенного скрипта, данные передадутся через глобальные переменные
 		const chartHTML = `
       <canvas id="ordersChart"></canvas>
       <script>
+        // Глобальные переменные для графика
+        const ordersChartData = ${JSON.stringify(ordersChartData)};
+        const ordersChartLabels = ${JSON.stringify(ordersChartLabels)};
         document.addEventListener('DOMContentLoaded', () => {
           const theme = document.documentElement.getAttribute('data-theme');
           const borderColor = (theme === 'light') ? '#7b61ff' : '#fff';
@@ -394,10 +412,10 @@ app.get('/', async (req, res) => {
           new Chart(ctx, {
             type: 'line',
             data: {
-              labels: ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"],
+              labels: ordersChartLabels,
               datasets: [{
                 label: 'Заказы',
-                data: ${JSON.stringify(chartData)},
+                data: ordersChartData,
                 backgroundColor: 'rgba(255,255,255,0.1)',
                 borderColor: borderColor,
                 borderWidth: 2,
@@ -412,6 +430,7 @@ app.get('/', async (req, res) => {
         });
       </script>
     `
+
 		const recentClients = (
 			await pool.query(`
       SELECT * FROM users ORDER BY registered_at DESC LIMIT 5
