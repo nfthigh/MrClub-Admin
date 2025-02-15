@@ -141,7 +141,7 @@ function getHeader(
     }
   </style>
 </head>
-<body class="hold-transition sidebar-mini dark-mode">
+<body class="hold-transition sidebar-mini">
 <div class="wrapper">
   <nav class="main-header navbar navbar-expand navbar-dark">
     <ul class="navbar-nav">
@@ -248,6 +248,56 @@ function getFooter() {
 <script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.print.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
 <script>
+  // Сохраняем выбранную тему через localStorage и устанавливаем её при загрузке страницы
+  document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    if (savedTheme === 'dark') {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+    
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+      themeToggle.addEventListener('click', () => {
+        const currentTheme = localStorage.getItem('theme') || 'dark';
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('theme', newTheme);
+        document.documentElement.setAttribute('data-theme', newTheme);
+        if(newTheme === 'light'){
+          document.body.classList.remove('dark-mode');
+        } else {
+          document.body.classList.add('dark-mode');
+        }
+        // Если график существует – пересоздать его с обновлённой темой (если требуется)
+        const ordersChartEl = document.getElementById('ordersChart');
+        if (ordersChartEl) {
+          const ctx = ordersChartEl.getContext('2d');
+          const borderColor = (newTheme === 'light') ? '#7b61ff' : '#fff';
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: ordersChartLabels,
+              datasets: [{
+                label: 'Заказы',
+                data: ordersChartData,
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                borderColor: borderColor,
+                borderWidth: 2,
+                fill: true
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false
+            }
+          });
+        }
+      });
+    }
+  });
+  
   const dtRussian = {
     "decimal": "",
     "emptyTable": "Нет данных в таблице",
@@ -304,51 +354,6 @@ function getFooter() {
     alert(data.message);
   });
 </script>
-<script>
-  const htmlEl = document.documentElement;
-  let currentTheme = 'dark';
-  document.addEventListener('DOMContentLoaded', () => {
-    const themeToggle = document.getElementById('themeToggle');
-    if (themeToggle) {
-      themeToggle.addEventListener('click', () => {
-        currentTheme = (currentTheme === 'dark') ? 'light' : 'dark';
-        htmlEl.setAttribute('data-theme', currentTheme);
-        if (currentTheme === 'light') {
-          document.body.classList.remove('dark-mode');
-        } else {
-          document.body.classList.add('dark-mode');
-        }
-        const ordersChartEl = document.getElementById('ordersChart');
-        if (ordersChartEl) {
-          const ctx = ordersChartEl.getContext('2d');
-          if (Chart.instances[ordersChartEl.id]) {
-            Chart.instances[ordersChartEl.id].destroy();
-          }
-          const borderColor = (currentTheme === 'light') ? '#7b61ff' : '#fff';
-          // Перестроим график с новыми данными
-          new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: ordersChartLabels,
-              datasets: [{
-                label: 'Заказы',
-                data: ordersChartData,
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderColor: borderColor,
-                borderWidth: 2,
-                fill: true
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false
-            }
-          });
-        }
-      });
-    }
-  });
-</script>
 </body>
 </html>
 `
@@ -378,7 +383,7 @@ app.get('/', async (req, res) => {
 		const onlineCount = parseInt(onlineRes.rows[0].count)
 		const revenue = parseFloat(revenueRes.rows[0].revenue)
 
-		// Формируем данные для графика заказов за последние 7 дней
+		// Запрос для графика заказов за последние 7 дней
 		const ordersChartQuery = await pool.query(`
       SELECT DATE_TRUNC('day', created_at) as day, COUNT(*) as count
       FROM orders
@@ -386,7 +391,7 @@ app.get('/', async (req, res) => {
       GROUP BY day
       ORDER BY day;
     `)
-		// Массив для 7 дней (индексы 0 - Пн, 6 - Вс)
+		// Массив для 7 дней, метки – Пн, Вт, ..., Вс
 		const ordersChartData = Array(7).fill(0)
 		const ordersChartLabels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
@@ -394,15 +399,13 @@ app.get('/', async (req, res) => {
 			const date = new Date(row.day)
 			let jsDay = date.getDay() // 0 - Вс, 1 - Пн, ..., 6 - Сб
 			let index = jsDay - 1
-			if (jsDay === 0) index = 6 // Переносим воскресенье в конец
+			if (jsDay === 0) index = 6 // перенос воскресенья в конец
 			ordersChartData[index] = parseInt(row.count)
 		})
 
-		// Формируем HTML для графика – теперь без встроенного скрипта, данные передадутся через глобальные переменные
 		const chartHTML = `
       <canvas id="ordersChart"></canvas>
       <script>
-        // Глобальные переменные для графика
         const ordersChartData = ${JSON.stringify(ordersChartData)};
         const ordersChartLabels = ${JSON.stringify(ordersChartLabels)};
         document.addEventListener('DOMContentLoaded', () => {
@@ -617,6 +620,8 @@ app.get('/', async (req, res) => {
 		res.status(500).send('Ошибка сервера')
 	}
 })
+
+// Остальные маршруты (clients, orders, add/edit/delete) остаются без изменений...
 
 app.get('/clients', async (req, res) => {
 	try {
