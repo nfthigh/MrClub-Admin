@@ -1,18 +1,21 @@
 {
-	"name": "mrclub-app",
-	"version": "1.0.0",
-	"main": "admin.js",
-	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1"
+  "name": "mrclub-admin",
+  "version": "1.0.0",
+  "description": "Админ-панель для мониторинга клиентов и заказов",
+  "main": "admin.js",
+  "scripts": {
+    "start": "node admin.js"
 	},
 	"keywords": [],
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
+		"dotenv": "^16.4.7",
 		"express": "^4.21.2",
 		"pg": "^8.13.1",
 		"socket.io": "^4.8.1",
-		"dotenv": "^16.0.3"
+    "node-fetch": "^3.3.2",
 	},
-	"description": ""
 }
+
+
