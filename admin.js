@@ -248,7 +248,7 @@ function getFooter() {
 <script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.print.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
 <script>
-  // Сохраняем выбранную тему через localStorage и устанавливаем её при загрузке страницы
+  // При загрузке страницы устанавливаем тему из localStorage
   document.addEventListener('DOMContentLoaded', () => {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
@@ -270,7 +270,7 @@ function getFooter() {
         } else {
           document.body.classList.add('dark-mode');
         }
-        // Если график существует – пересоздать его с обновлённой темой (если требуется)
+        // Если график существует – пересоздать его с обновлённой темой
         const ordersChartEl = document.getElementById('ordersChart');
         if (ordersChartEl) {
           const ctx = ordersChartEl.getContext('2d');
@@ -353,6 +353,16 @@ function getFooter() {
     $('#notifHeader').text('Уведомлений: ' + notifications.length);
     alert(data.message);
   });
+  
+  // При получении обновленной системной информации обновляем карточку
+  socket.on('system-info-update', data => {
+    if(document.getElementById('infoClients')){
+      document.getElementById('infoClients').textContent = data.totalClients;
+      document.getElementById('infoOrders').textContent = data.totalOrders;
+      document.getElementById('infoOnline').textContent = data.onlineCount;
+      document.getElementById('infoRevenue').textContent = '$' + data.revenue.toFixed(2);
+    }
+  });
 </script>
 </body>
 </html>
@@ -391,7 +401,6 @@ app.get('/', async (req, res) => {
       GROUP BY day
       ORDER BY day;
     `)
-		// Массив для 7 дней, метки – Пн, Вт, ..., Вс
 		const ordersChartData = Array(7).fill(0)
 		const ordersChartLabels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
@@ -620,8 +629,6 @@ app.get('/', async (req, res) => {
 		res.status(500).send('Ошибка сервера')
 	}
 })
-
-// Остальные маршруты (clients, orders, add/edit/delete) остаются без изменений...
 
 app.get('/clients', async (req, res) => {
 	try {
@@ -1068,33 +1075,33 @@ app.get('/system-info', async (req, res) => {
 	}
 })
 
-let lastUserCount = 0
-let lastOrderCount = 0
-async function pollDatabase() {
+// Функция для периодического обновления системной информации в реальном времени
+async function updateSystemInfo() {
 	try {
-		const userRes = await pool.query('SELECT COUNT(*) FROM users')
-		const orderRes = await pool.query('SELECT COUNT(*) FROM orders')
-		const userCount = parseInt(userRes.rows[0].count)
-		const orderCount = parseInt(orderRes.rows[0].count)
-		if (lastUserCount && userCount > lastUserCount) {
-			const diff = userCount - lastUserCount
-			ioServer.emit('notification', {
-				message: `Новый клиент зарегистрирован (+${diff})`,
-			})
+		const totalClientsRes = await pool.query('SELECT COUNT(*) FROM users')
+		const totalOrdersRes = await pool.query('SELECT COUNT(*) FROM orders')
+		const onlineRes = await pool.query(`
+      SELECT COUNT(*) FROM users
+      WHERE last_activity > CURRENT_TIMESTAMP - interval '5 minutes'
+    `)
+		const revenueRes = await pool.query(`
+      SELECT COALESCE(SUM(totalamount),0) AS revenue
+      FROM orders
+      WHERE status='PAID'
+    `)
+		const systemInfo = {
+			totalClients: parseInt(totalClientsRes.rows[0].count),
+			totalOrders: parseInt(totalOrdersRes.rows[0].count),
+			onlineCount: parseInt(onlineRes.rows[0].count),
+			revenue: parseFloat(revenueRes.rows[0].revenue),
 		}
-		if (lastOrderCount && orderCount > lastOrderCount) {
-			const diff = orderCount - lastOrderCount
-			ioServer.emit('notification', {
-				message: `Новый заказ создан (+${diff})`,
-			})
-		}
-		lastUserCount = userCount
-		lastOrderCount = orderCount
+		// Отправляем обновленные данные всем подключенным клиентам
+		ioServer.emit('system-info-update', systemInfo)
 	} catch (err) {
-		console.error('Ошибка при опросе БД:', err)
+		console.error('Ошибка при обновлении системной информации:', err)
 	}
 }
-setInterval(pollDatabase, 10000)
+setInterval(updateSystemInfo, 10000)
 
 const selfPingUrl = process.env.SELF_PING_URL
 if (selfPingUrl) {
