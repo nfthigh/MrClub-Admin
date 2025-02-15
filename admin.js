@@ -358,6 +358,7 @@ function getFooter() {
 `
 }
 
+// Создаем HTTP-сервер и Socket.io один раз
 const server = http.createServer(app)
 const ioServer = new Server(server)
 
@@ -1079,9 +1080,6 @@ if (selfPingUrl) {
 			.catch(e => console.error('Self-ping err:', e))
 	}, 240000)
 }
-
-const server = http.createServer(app)
-const ioServer = new Server(server)
 
 server.listen(port, () => {
 	console.log(`Админ-панель запущена на http://0.0.0.0:${port}`)
