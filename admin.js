@@ -91,7 +91,6 @@ function getHeader(
     body.dark-mode {
       background-color: #1f2937 !important;
     }
-    /* В светлой теме меняем ТОЛЬКО фон body */
     html[data-theme='light'] body {
       background-color: #f8f9fa !important;
       color: #212529 !important;
@@ -99,7 +98,6 @@ function getHeader(
     .main-header.navbar-dark {
       background: #1f2937;
     }
-    /* Не меняем цвета верхней панели и бокового меню */
     .brand-link {
       background: linear-gradient(135deg, #342b78, #8762d4) !important;
       color: #fff !important;
@@ -324,11 +322,9 @@ function getFooter() {
         } else {
           document.body.classList.add('dark-mode');
         }
-        // Перерисовываем график с новым цветом линии
         const ordersChartEl = document.getElementById('ordersChart');
         if (ordersChartEl) {
           const ctx = ordersChartEl.getContext('2d');
-          // Удаляем предыдущий график, если он существует
           if (Chart.instances[ordersChartEl.id]) {
             Chart.instances[ordersChartEl.id].destroy();
           }
@@ -365,6 +361,7 @@ function getFooter() {
 const server = http.createServer(app)
 const ioServer = new Server(server)
 
+// Дашборд
 app.get('/', async (req, res) => {
 	try {
 		const search = req.query.search || ''
